@@ -1,0 +1,50 @@
+name: sales-pulse-pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -r requirements.txt
+      - run: pytest
+
+  build:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, packages: write }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - run: |
+          IMAGE=$(echo "ghcr.io/${{ github.repository_owner }}/sales-pulse" | tr '[:upper:]' '[:lower:]')
+          docker build -t $IMAGE:${{ github.sha }} -t $IMAGE:latest .
+          docker push --all-tags $IMAGE
+
+  # Deploy runs only after you add the EC2_HOST secret (AWS step).
+  deploy:
+    needs: build
+    if: ${{ vars.DEPLOY_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            IMAGE=$(echo "ghcr.io/${{ github.repository_owner }}/sales-pulse" | tr '[:upper:]' '[:lower:]'):${{ github.sha }}
+            docker pull $IMAGE
+            docker rm -f sales-pulse || true
+            docker run -d --name sales-pulse --restart always -p 80:5000 $IMAGE

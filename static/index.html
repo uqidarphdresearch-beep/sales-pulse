@@ -1,0 +1,25 @@
+<!doctype html>
+<html>
+<head>
+  <title>Maggi Sales Pulse</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+</head>
+<body style="font-family:sans-serif; max-width:800px; margin:40px auto">
+  <h1>Maggi Sales Pulse · Rajasthan</h1>
+  <p>Packs sold last month, by district (thousands)</p>
+  <canvas id="chart"></canvas>
+  <script>
+    fetch('/api/sales')
+      .then(res => res.json())
+      .then(rows => {
+        new Chart(document.getElementById('chart'), {
+          type: 'bar',
+          data: {
+            labels: rows.map(r => r.district),
+            datasets: [{ label: 'Packs (000s)', data: rows.map(r => r.packs) }]
+          }
+        });
+      });
+  </script>
+</body>
+</html>
